@@ -1,0 +1,68 @@
+---
+title: "Storm_analisys"
+output: html_document
+---
+
+##Synopsys
+
+
+##Data processing
+
+From the [U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) we obtain data, which include characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage. Data are collected from  1950 to November 2011.
+
+```{r cache=T}
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", destfile="StormData.bz2")
+```
+
+Then we read in the data from csv file in bz2 archive and get some information about data structure.
+
+```{r cache=T}
+dt <- read.csv(".\\StormData\\StormData.csv")
+str(dt)
+head(dt)
+```
+Select only variables that we are interested in (connected with population health and economic consequencies)
+
+```{r}
+library(dplyr)
+dt <- select(dt, REFNUM, BGN_DATE, EVTYPE, FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP)
+```
+
+Let's look at values that we have for variables PROPDMGEXP and CROPDMGEXP
+
+```{r}
+levels(dt$PROPDMGEXP)
+levels(dt$CROPDMGEXP)
+```
+
+As these columns stand for units of corresponding variables it's obvious (and can be read form description file), what values 'h','m','b' and 'k' stand for. Other values don't make sense, so let's look at how many rows we have with such values and what are the years of corresponding records.
+
+```{r}
+library(lubridate)
+dt<- mutate(dt, Year = year(as.Date(as.character(BGN_DATE),"%m/%d/%Y %H:%M:%S")))
+strangeUnits <- filter(dt, PROPDMGEXP %in% c("-","?","+","0","1","2","3","4","5","6","7","8") | CROPDMGEXP %in% c("?","0","2"))
+nrow(strangeUnits)
+table(strangeUnits$Year)
+```
+
+As we see, there aren't many of them (comparing to the size of dataset) and almost all of the cases correspond to 1994-1995 years (maybe system of records wasn't very precise in these years). So our decision will be to throw away these data.
+
+```{r}
+dt <- filter(dt, !(PROPDMGEXP %in% c("-","?","+","0","1","2","3","4","5","6","7","8") | CROPDMGEXP %in% c("?","0","2")))
+```
+
+Now we add two columns with damage sums.
+
+
+dt<-mutate(dt, PROPDMGEXP = tolower(PROPDMGEXP), CROPDMGEXP = tolower(CROPDMGEXP),
+           PropDmg = ifelse(PROPDMGEXP=='h', PROPDMG*100,
+                            ifelse(PROPDMGEXP=='k', PROPDMG*1000,
+                                   ifelse(PROPDMGEXP=='m', PROPDMG*1000000,
+                                          ifelse(PROPDMGEXP=='b', PROPDMG*1000000000,PROPDMG)))),
+           CropDmg = ifelse(CROPDMGEXP=='h', CROPDMG*100,
+                            ifelse(CROPDMGEXP=='k', CROPDMG*1000,
+                                   ifelse(CROPDMGEXP=='m', CROPDMG*1000000,
+                                          ifelse(CROPDMGEXP=='b', CROPDMG*1000000000,CROPDMG)))))
+
+
+##Results
