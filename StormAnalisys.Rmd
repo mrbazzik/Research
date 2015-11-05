@@ -1,22 +1,27 @@
 ---
-title: "Storm_analisys"
+title: "Tornado and Flood bring most damage to our health and wealth"
 output: html_document
 ---
 
 ##Synopsys
 
+In this report we aim to answer two questions:
+- Across the United States, which types of events are most harmful with respect to population health?
+- Across the United States, which types of events have the greatest economic consequences?
+To get answer we obtain data from the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database, which include characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage. Data are collected from  1950 to November 2011. 
+From data analysis we found that Tornado is the most harmfull events, and Flood has the biggest economical consequencies in total, although Drought brings more damage to crop.
 
 ##Data processing
 
-From the [U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) we obtain data, which include characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage. Data are collected from  1950 to November 2011.
+First we download data from https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2.
 
-```{r cache=T}
-download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", destfile="StormData.bz2")
+```{r cache=TRUE}
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", destfile="StormData.bz2", method="curl")
 ```
 
 Then we read in the data from csv file in bz2 archive and get some information about data structure.
 
-```{r cache=T}
+```{r cache=TRUE}
 dt <- read.csv(".\\StormData\\StormData.csv")
 str(dt)
 head(dt)
@@ -51,18 +56,67 @@ As we see, there aren't many of them (comparing to the size of dataset) and almo
 dt <- filter(dt, !(PROPDMGEXP %in% c("-","?","+","0","1","2","3","4","5","6","7","8") | CROPDMGEXP %in% c("?","0","2")))
 ```
 
-Now we add two columns with damage sums.
+Now we add columns with corrected sums.
 
+```{r}
 
-dt<-mutate(dt, PROPDMGEXP = tolower(PROPDMGEXP), CROPDMGEXP = tolower(CROPDMGEXP),
-           PropDmg = ifelse(PROPDMGEXP=='h', PROPDMG*100,
-                            ifelse(PROPDMGEXP=='k', PROPDMG*1000,
-                                   ifelse(PROPDMGEXP=='m', PROPDMG*1000000,
-                                          ifelse(PROPDMGEXP=='b', PROPDMG*1000000000,PROPDMG)))),
-           CropDmg = ifelse(CROPDMGEXP=='h', CROPDMG*100,
-                            ifelse(CROPDMGEXP=='k', CROPDMG*1000,
-                                   ifelse(CROPDMGEXP=='m', CROPDMG*1000000,
-                                          ifelse(CROPDMGEXP=='b', CROPDMG*1000000000,CROPDMG)))))
+dt<- dt %>% mutate(PROPDMGEXP = tolower(PROPDMGEXP), CROPDMGEXP = tolower(CROPDMGEXP)) %>%
+            mutate(PropDmg = ifelse(PROPDMGEXP=='h', PROPDMG*100,PROPDMG)) %>%
+            mutate(CropDmg = ifelse(CROPDMGEXP=='h', CROPDMG*100,CROPDMG)) %>%
+            mutate(PropDmg = ifelse(PROPDMGEXP=='k', PROPDMG*1000,PropDmg)) %>%
+            mutate(CropDmg = ifelse(CROPDMGEXP=='k', CROPDMG*1000,CropDmg)) %>%
+            mutate(PropDmg = ifelse(PROPDMGEXP=='m', PROPDMG*1000000,PropDmg)) %>%
+            mutate(CropDmg = ifelse(CROPDMGEXP=='m', CROPDMG*1000000,CropDmg)) %>%
+            mutate(PropDmg = ifelse(PROPDMGEXP=='b', PROPDMG*1000000000,PropDmg)) %>%
+            mutate(CropDmg = ifelse(CROPDMGEXP=='b', CROPDMG*1000000000,CropDmg)) %>%
+            mutate(TotalDmg = PropDmg+CropDmg) %>%
+            mutate(TotalInj = FATALITIES+INJURIES)
 
+```
+Then we aggregate data by event type.
+
+```{r}
+dtagg <- aggregate(dt[,c('PropDmg','CropDmg','TotalDmg','FATALITIES','INJURIES','TotalInj')], by=list(dt$EVTYPE), FUN=sum)
+
+```
 
 ##Results
+
+The first question we are interested in is "Across the United States, which types of events are most harmful with respect to population health?" In order to answer let's first remove events with zero total harmness.
+
+```{r}
+
+dtHarm <- filter(dtagg, TotalInj > 0)
+dim(dtHarm)
+```
+
+We still have a lot of data, so let's look at top ten most harmfull types.
+
+```{r}
+par(mfrow=c(2,1))
+dtHarmTotal <- dtHarm %>% arrange(desc(TotalInj)) %>% slice(1:10)
+barplot(dtHarmTotal$TotalInj, names.arg=dtHarmTotal$Group.1, las=2, main="Total number of injuries and fatalities")
+
+dtHarmFat <- dtHarm %>% arrange(desc(FATALITIES)) %>% slice(1:10)
+barplot(dtHarmFat$FATALITIES, names.arg=dtHarmFat$Group.1, las=2, main="Number of fatalities")
+```
+
+From plots we see that most harmful events are Tornado and Excessive heat both for counting fatalities or total injuries.
+
+Now let's consider another question "Across the United States, which types of events have the greatest economic consequences?". 
+
+So let's look at top ten most damagefull types.
+
+```{r}
+par(mfrow=c(3,1))
+dtDmgTotal <- dtagg %>% arrange(desc(TotalDmg)) %>% slice(1:10)
+barplot(dtDmgTotal$TotalDmg, names.arg=dtDmgTotal$Group.1, las=2, main="Total damage")
+
+dtDmgProp <- dtagg %>% arrange(desc(PropDmg)) %>% slice(1:10)
+barplot(dtDmgProp$PropDmg, names.arg=dtDmgProp$Group.1, las=2, main="Propperty damage")
+
+dtDmgCrop <- dtagg %>% arrange(desc(CropDmg)) %>% slice(1:10)
+barplot(dtDmgCrop$CropDmg, names.arg=dtDmgCrop$Group.1, las=2, main="Crop damage")
+```
+
+Now we see that considering total damage or property damage Flood is the most harmful event, but for crop damage we see it at the second place with Drought at the first, which quite makes sense.
